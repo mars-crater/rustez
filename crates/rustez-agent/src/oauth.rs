@@ -307,6 +307,8 @@ pub fn parse_pasted_code(input: &str) -> anyhow::Result<(String, Option<String>)
     };
     let mut code = None;
     let mut state = None;
+    let mut refused = None;
+    let mut refused_detail = None;
     for part in query.split('&') {
         let (k, v) = match part.find('=') {
             Some(i) => (&part[..i], &part[i + 1..]),
@@ -315,13 +317,27 @@ pub fn parse_pasted_code(input: &str) -> anyhow::Result<(String, Option<String>)
         match k {
             "code" => code = Some(percent_decode(v)),
             "state" => state = Some(percent_decode(v)),
-            "error" => anyhow::bail!("provider refused: {}", percent_decode(v)),
+            "error" => refused = Some(percent_decode(v)),
+            "error_description" => refused_detail = Some(percent_decode(v)),
             _ => {}
         }
     }
     match code {
         Some(c) if !c.is_empty() => Ok((c, state)),
-        _ => anyhow::bail!("no ?code= found in pasted input"),
+        _ => {
+            if let Some(e) = refused {
+                let mut msg = format!("provider refused: {e}");
+                if let Some(d) = refused_detail.filter(|d| !d.is_empty()) {
+                    msg.push_str(&format!(" ({d})"));
+                }
+                msg.push_str(
+                    " — approvals are single-use and expire in minutes: start a fresh dance, \
+                    approve once in the newest tab, and paste THAT url",
+                );
+                anyhow::bail!("{msg}");
+            }
+            anyhow::bail!("no ?code= found in pasted input")
+        }
     }
 }
 
@@ -802,6 +818,18 @@ mod tests {
         assert!(
             parse_pasted_code("http://localhost:1455/auth/callback?error=access_denied").is_err()
         );
+    }
+
+    #[test]
+    fn refusal_names_reason_and_recovery() {
+        let err = parse_pasted_code(
+            "http://localhost:1455/auth/callback?error=invalid_state&error_description=stale%20tab",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("invalid_state"), "{err}");
+        assert!(err.contains("stale tab"), "{err}");
+        assert!(err.contains("fresh dance"), "{err}");
     }
 
     #[test]
