@@ -290,20 +290,48 @@ fn run_dance(o: &DanceOpts) -> oauth::EzAuthProfile {
 }
 
 async fn run_dance_async(o: &DanceOpts) -> oauth::EzAuthProfile {
-    // Scripted handoff: exchange a pasted code with a prior --print-url verifier.
+    // Pasted whole URL: explicit --verifier wins (scripted --print-url handoff),
+    // otherwise resume the saved browser dance — no re-approval needed.
     if let Some(code_in) = o.paste_code.as_deref() {
-        let verifier = o.verifier.as_deref().unwrap_or("").trim();
-        if verifier.is_empty() {
-            eprintln!("--paste-code needs --verifier from a prior --print-url.");
-            std::process::exit(2);
-        }
-        let (code, _) = oauth::parse_pasted_code(code_in).unwrap_or_else(|e| {
+        let explicit = o
+            .verifier
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty());
+        let saved = explicit
+            .is_none()
+            .then(|| oauth::load_pending("openai").unwrap_or(None))
+            .flatten();
+        let (uri, verifier) = match (explicit, saved.clone()) {
+            (Some(v), _) => (oauth::redirect_uri(), v.to_string()),
+            (None, Some(p)) => {
+                if oauth::now_ms().saturating_sub(p.started_ms) > 30 * 60 * 1000 {
+                    eprintln!("saved dance is older than 30 min — codes expire fast.");
+                    eprintln!("rerun the browser flow, approve, and paste that URL instead.");
+                    std::process::exit(1);
+                }
+                (p.redirect_uri, p.verifier)
+            }
+            (None, None) => {
+                eprintln!("--paste-code needs a saved dance (rerun the browser flow first)");
+                eprintln!("or pair it with --verifier from a prior --print-url.");
+                std::process::exit(2);
+            }
+        };
+        let (code, got_state) = oauth::parse_pasted_code(code_in).unwrap_or_else(|e| {
             eprintln!("bad pasted code: {e:#}");
+            eprintln!("paste the whole address-bar URL, quoted if it contains &.");
             std::process::exit(1);
         });
-        return finish_login(
-            oauth::exchange_code(&code, verifier, &oauth::redirect_uri(), None).await,
-        );
+        // When resuming, the URL must belong to the saved dance.
+        if let (None, Some(p), Some(s)) = (explicit, saved, got_state) {
+            if s != p.state {
+                eprintln!("that URL belongs to a different dance run — paste the URL");
+                eprintln!("from the address bar of THIS run, or start a fresh dance.");
+                std::process::exit(1);
+            }
+        }
+        return finish_login(oauth::exchange_code(&code, &verifier, &uri, None).await);
     }
     if o.device {
         return device_dance().await;
@@ -338,6 +366,17 @@ async fn browser_dance(paste: bool, print_url: bool, no_open: bool) -> oauth::Ez
     let state = oauth::new_state();
     let uri = oauth::redirect_uri();
     let url = oauth::authorize_url(&uri, &challenge, &state);
+    // Persist so --paste-code '<whole-url>' can finish this dance even if the
+    // waiting process dies (the code is useless without this verifier).
+    let _ = oauth::save_pending(
+        "openai",
+        &oauth::PendingDance {
+            verifier: verifier.clone(),
+            state: state.clone(),
+            redirect_uri: uri.clone(),
+            started_ms: oauth::now_ms(),
+        },
+    );
     if print_url {
         print_url_handoff();
     }
@@ -366,9 +405,8 @@ async fn browser_dance(paste: bool, print_url: bool, no_open: bool) -> oauth::Ez
         Err(e) => {
             eprintln!("callback failed: {e:#}");
             eprintln!("If the browser approved but localhost:1455 shows unreachable,");
-            eprintln!(
-                "copy the full address-bar URL (it still has ?code=…) and rerun with --paste."
-            );
+            eprintln!("copy the whole address-bar URL (it still has ?code=…) and rerun with");
+            eprintln!("--paste-code '<url>' — this dance was saved, no need to approve again.");
             eprintln!("Headless machine: rerun with --device.");
             std::process::exit(1);
         }
@@ -411,6 +449,8 @@ fn finish_login(res: anyhow::Result<oauth::EzAuthProfile>) -> oauth::EzAuthProfi
         eprintln!("save credentials: {e:#}");
         std::process::exit(1);
     });
+    // Dance complete — a saved pending verifier must not outlive it.
+    let _ = oauth::clear_pending("openai");
     profile
 }
 
@@ -569,8 +609,11 @@ fn onboard(o: OnboardOpts) {
         }
     }
     if o.non_interactive && o.paste_code.is_none() {
-        eprintln!("non-interactive onboard needs --paste-code + --verifier (from --print-url),");
-        eprintln!("or run interactively: the dance needs a human in the browser.");
+        eprintln!(
+            "non-interactive onboard needs --paste-code '<whole-url>' (from the browser run),"
+        );
+        eprintln!("or --paste-code + --verifier (from --print-url). Otherwise run interactively:");
+        eprintln!("the dance needs a human in the browser.");
         std::process::exit(2);
     }
     let model = match o.model {

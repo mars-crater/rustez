@@ -168,7 +168,19 @@ Verified after trim: `fmt` ok, `clippy -D warnings` ok, `test` ok (0 tests).
   `--paste`; headless → `--device`. Same hint on the TUI Failed screen.
 - Verify: `fmt`/`clippy -D warnings` clean, full workspace green.
 
-## 13. Next
+## 13. Fix (2026-09-04) — whole-URL paste finishes the same dance
+
+- `parse_pasted_code` strips surrounding quotes/whitespace: the whole address-bar
+  URL pastes verbatim (quoted or not).
+- Browser dance persists its verifier/state (`auth/.pending-openai.json`, `0600`):
+  `--paste-code '<whole-url>'` resumes it with state-match validation and a 30-min
+  freshness cap — approval survives a dead callback wait, no re-approval needed.
+  Cleared on successful login. Explicit `--verifier` (scripted `--print-url`) unchanged.
+- Also fixed a latent flake: env-mutating store tests now serialize on a mutex.
+- Verify: `fmt`/`clippy -D warnings` clean, workspace green incl. 2 new oauth tests
+  (quoted-URL paste, pending roundtrip + perms + redacted Debug).
+
+## 14. Next
 
 - Still TODO (needs onboarding specs): JSON5/`$include`/exec secrets, WS/RPC+pairing, Discord start/send, provider chat+`sub_usage` poll, full wizard fields+test/apply, focused-node UI components.
 - Run: `EZ_CONFIG_PATH=./rustez.json cargo run -p rustez -- doctor|status|gateway`.

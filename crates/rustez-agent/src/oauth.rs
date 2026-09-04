@@ -124,6 +124,70 @@ pub fn clear_profile(provider: &str) -> anyhow::Result<bool> {
     }
 }
 
+/// An in-flight browser dance, persisted so a pasted address-bar URL can finish
+/// it even after the waiting process died. Verifier material — redacted Debug.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct PendingDance {
+    pub verifier: String,
+    pub state: String,
+    pub redirect_uri: String,
+    pub started_ms: u128,
+}
+
+impl std::fmt::Debug for PendingDance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PendingDance")
+            .field("verifier", &"***")
+            .field("state", &self.state)
+            .field("redirect_uri", &self.redirect_uri)
+            .field("started_ms", &self.started_ms)
+            .finish()
+    }
+}
+
+/// Pending-dance path (hidden file beside the profile).
+pub fn pending_path(provider: &str) -> std::path::PathBuf {
+    auth_dir().join(format!(".pending-{provider}.json"))
+}
+
+/// Save the pending dance (`0600`, dir `0700`).
+pub fn save_pending(provider: &str, pending: &PendingDance) -> anyhow::Result<()> {
+    let dir = auth_dir();
+    std::fs::create_dir_all(&dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    use std::os::unix::fs::OpenOptionsExt;
+    let body = serde_json::to_string_pretty(pending)?;
+    let mut opt = std::fs::OpenOptions::new();
+    opt.write(true).create(true).truncate(true).mode(0o600);
+    let mut f = opt.open(pending_path(provider))?;
+    f.write_all(body.as_bytes())?;
+    Ok(())
+}
+
+/// Load the pending dance, if any.
+pub fn load_pending(provider: &str) -> anyhow::Result<Option<PendingDance>> {
+    let path = pending_path(provider);
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => anyhow::bail!("read {}: {e}", path.display()),
+    };
+    Ok(Some(serde_json::from_str(&text).map_err(|e| {
+        anyhow::anyhow!("parse {}: {e}", path.display())
+    })?))
+}
+
+/// Delete the pending dance (call after a successful exchange).
+pub fn clear_pending(provider: &str) -> anyhow::Result<()> {
+    match std::fs::remove_file(pending_path(provider)) {
+        Ok(()) | Err(_) => Ok(()),
+    }
+}
+
 /// Generate a PKCE pair: `(verifier, challenge)` (S256, base64url no-pad).
 pub fn pkce_pair() -> (String, String) {
     use rand::RngCore;
@@ -229,8 +293,10 @@ fn hex_val(b: u8) -> Option<u8> {
 }
 
 /// Parse a pasted code or full redirect URL into `(code, state?)`.
+/// Accepts the whole address-bar URL verbatim — surrounding quotes and
+/// whitespace are stripped, so shell-quoted pastes work too.
 pub fn parse_pasted_code(input: &str) -> anyhow::Result<(String, Option<String>)> {
-    let t = input.trim();
+    let t = input.trim().trim_matches(|c| c == '"' || c == '\'').trim();
     if t.is_empty() {
         anyhow::bail!("empty code");
     }
@@ -339,7 +405,8 @@ pub fn wait_for_callback(expected_state: &str, timeout: Duration) -> anyhow::Res
     anyhow::bail!(
         "timed out waiting for the browser callback. If the browser shows approval succeeded \
         but localhost:{CALLBACK_PORT} is unreachable (e.g. rustez runs on another machine), copy \
-        the full address-bar URL — it still carries ?code=… — and rerun with --paste. \
+        the whole address-bar URL — it still carries ?code=… — and rerun with \
+        --paste-code '<url>' (this dance's verifier was saved, no need to approve again). \
         Headless machines: rerun with --device."
     )
 }
@@ -690,6 +757,9 @@ pub async fn device_poll(
 mod tests {
     use super::*;
 
+    /// `RUSTEZ_AUTH_DIR` is process-global: serialize the tests that mutate it.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn pkce_rfc7636_vector() {
         // RFC 7636 Appendix B test vector.
@@ -735,6 +805,52 @@ mod tests {
     }
 
     #[test]
+    fn paste_accepts_whole_quoted_url() {
+        // Whole address-bar URL, shell-quoted, trailing quote included.
+        let (code, state) =
+            parse_pasted_code("\"http://localhost:1455/auth/callback?code=ABC123&state=ST9\"")
+                .unwrap();
+        assert_eq!(
+            (code, state),
+            ("ABC123".to_string(), Some("ST9".to_string()))
+        );
+        let (code, _) = parse_pasted_code("'ABC123'").unwrap();
+        assert_eq!(code, "ABC123");
+    }
+
+    #[test]
+    fn pending_dance_roundtrip() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("RUSTEZ_AUTH_DIR", dir.path());
+        assert!(load_pending("openai").unwrap().is_none());
+        let p = PendingDance {
+            verifier: "v".to_string(),
+            state: "s".to_string(),
+            redirect_uri: "http://localhost:1455/auth/callback".to_string(),
+            started_ms: 7,
+        };
+        save_pending("openai", &p).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(pending_path("openai"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o600);
+        }
+        let back = load_pending("openai").unwrap().unwrap();
+        assert_eq!(back.verifier, "v");
+        assert_eq!(back.state, "s");
+        assert!(!format!("{back:?}").contains("\"v\""));
+        clear_pending("openai").unwrap();
+        assert!(load_pending("openai").unwrap().is_none());
+        std::env::remove_var("RUSTEZ_AUTH_DIR");
+    }
+
+    #[test]
     fn identity_from_crafted_token() {
         use base64::engine::Engine;
         let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
@@ -763,6 +879,7 @@ mod tests {
 
     #[test]
     fn store_roundtrip_private() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("RUSTEZ_AUTH_DIR", dir.path());
         let p = EzAuthProfile {

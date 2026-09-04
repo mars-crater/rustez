@@ -600,8 +600,9 @@ fn draw_failed(f: &mut Frame, area: Rect, app: &App) {
         "Approved but localhost:1455 unreachable? copy the",
     ));
     lines.push(Line::from(
-        "address-bar URL (?code=… survives) and rerun with paste.",
+        "whole address-bar URL and rerun: --paste-code '<url>'",
     ));
+    lines.push(Line::from("(saved verifier — no need to approve again)."));
     lines.push(Line::from("Headless? rerun with the device method."));
     f.render_widget(
         Paragraph::new(lines).block(Block::default().title("Failed").borders(Borders::ALL)),

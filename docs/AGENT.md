@@ -71,7 +71,10 @@ ChatGPT OAuth (the `openai` dance — there is no token to paste):
 `rustez auth login` opens `auth.openai.com` (PKCE S256, public Codex client,
 `localhost:1455` callback; `--device` for headless, `--paste` for manual URL paste).
 Creds land in `~/.rustez/auth/openai.json` (`0600`: access, rotating refresh,
-expiry, account id). Runtime auto-refreshes inside a 2-min margin and chats via
+expiry, account id). The browser dance also saves a pending verifier
+(`.pending-openai.json`, `0600`, 30-min use window) so a pasted address-bar URL
+finishes the same dance with `--paste-code '<whole-url>'` — no re-approval.
+Runtime auto-refreshes inside a 2-min margin and chats via
 `chatgpt.com/backend-api/codex` (Bearer + `ChatGPT-Account-Id`). `auth status`
 shows state without secrets; `auth logout` deletes. `RUSTEZ_AUTH_DIR` overrides
 the store path (tests use this).
