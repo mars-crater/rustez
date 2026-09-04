@@ -330,6 +330,10 @@ fn print_url_handoff() -> ! {
 
 /// Browser dance: open `auth.openai.com`, catch the `:1455` callback (or pasted URL).
 async fn browser_dance(paste: bool, print_url: bool, no_open: bool) -> oauth::EzAuthProfile {
+    if let Err(e) = oauth::preflight().await {
+        eprintln!("{e:#}");
+        std::process::exit(1);
+    }
     let (verifier, challenge) = oauth::pkce_pair();
     let state = oauth::new_state();
     let uri = oauth::redirect_uri();
@@ -361,7 +365,11 @@ async fn browser_dance(paste: bool, print_url: bool, no_open: bool) -> oauth::Ez
         Ok(code) => finish_login(oauth::exchange_code(&code, &verifier, &uri, None).await),
         Err(e) => {
             eprintln!("callback failed: {e:#}");
-            eprintln!("retry with --paste (paste the redirect URL) or --device (headless).");
+            eprintln!("If the browser approved but localhost:1455 shows unreachable,");
+            eprintln!(
+                "copy the full address-bar URL (it still has ?code=…) and rerun with --paste."
+            );
+            eprintln!("Headless machine: rerun with --device.");
             std::process::exit(1);
         }
     }
@@ -369,6 +377,10 @@ async fn browser_dance(paste: bool, print_url: bool, no_open: bool) -> oauth::Ez
 
 /// Device dance for headless machines: code entry at the verification page.
 async fn device_dance() -> oauth::EzAuthProfile {
+    if let Err(e) = oauth::preflight().await {
+        eprintln!("{e:#}");
+        std::process::exit(1);
+    }
     let (id, code, interval) = oauth::device_usercode().await.unwrap_or_else(|e| {
         eprintln!("device flow rejected: {e:#}");
         std::process::exit(1);

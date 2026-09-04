@@ -596,8 +596,13 @@ fn draw_failed(f: &mut Frame, area: Rect, app: &App) {
         lines.push(Line::from(e.clone()));
     }
     lines.push(Line::from(""));
+    lines.push(Line::from(
+        "Approved but localhost:1455 unreachable? copy the",
+    ));
+    lines.push(Line::from(
+        "address-bar URL (?code=… survives) and rerun with paste.",
+    ));
     lines.push(Line::from("Headless? rerun with the device method."));
-    lines.push(Line::from("Browser didn't return? rerun with paste."));
     f.render_widget(
         Paragraph::new(lines).block(Block::default().title("Failed").borders(Borders::ALL)),
         area,

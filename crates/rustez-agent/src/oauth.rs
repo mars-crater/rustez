@@ -259,64 +259,89 @@ pub fn parse_pasted_code(input: &str) -> anyhow::Result<(String, Option<String>)
     }
 }
 
-/// One-shot localhost callback server: waits for `?code=&state=` on
-/// `127.0.0.1:1455/auth/callback`, validates `state`, returns the code.
+/// One-shot localhost callback server: waits for `?code=&state=` on port `:1455`.
+/// Binds both `127.0.0.1` and `[::1]` — browsers differ on which `localhost`
+/// means, and a single-stack bind shows as "site can't be reached" on the other.
 pub fn wait_for_callback(expected_state: &str, timeout: Duration) -> anyhow::Result<String> {
-    let listener = std::net::TcpListener::bind(("127.0.0.1", CALLBACK_PORT)).map_err(|e| {
-        anyhow::anyhow!("bind 127.0.0.1:{CALLBACK_PORT}: {e} (is another dance running?)")
-    })?;
-    listener.set_nonblocking(true)?;
+    let mut listeners = Vec::new();
+    listeners.push(
+        std::net::TcpListener::bind(("127.0.0.1", CALLBACK_PORT)).map_err(|e| {
+            anyhow::anyhow!("bind 127.0.0.1:{CALLBACK_PORT}: {e} (is another dance running?)")
+        })?,
+    );
+    // IPv6 loopback is best-effort: absent on some hosts, fatal on none.
+    if let Ok(l) = std::net::TcpListener::bind(("::1", CALLBACK_PORT)) {
+        listeners.push(l);
+    }
+    for l in &listeners {
+        l.set_nonblocking(true)?;
+    }
     let deadline = std::time::Instant::now() + timeout;
     let ok_page = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<h1>RustEZ login complete — return to the terminal.</h1>";
     let err_page = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<h1>Login failed — wrong state or missing code. Check the terminal.</h1>";
     while std::time::Instant::now() < deadline {
-        match listener.accept() {
-            Ok((mut stream, _)) => {
-                let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
-                let mut buf = vec![0u8; 8192];
-                let mut got = 0;
-                loop {
-                    match stream.read(&mut buf[got..]) {
-                        Ok(0) | Err(_) => break,
-                        Ok(n) => {
-                            got += n;
-                            if got >= buf.len()
-                                || (got >= 4 && buf[..got].windows(4).any(|w| w == b"\r\n\r\n"))
-                            {
-                                break;
-                            }
-                        }
+        let mut accepted = None;
+        for l in &listeners {
+            match l.accept() {
+                Ok((stream, _)) => {
+                    accepted = Some(stream);
+                    break;
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                Err(e) => anyhow::bail!("accept: {e}"),
+            }
+        }
+        let mut stream = match accepted {
+            Some(s) => s,
+            None => {
+                std::thread::sleep(Duration::from_millis(100));
+                continue;
+            }
+        };
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+        let mut buf = vec![0u8; 8192];
+        let mut got = 0;
+        loop {
+            match stream.read(&mut buf[got..]) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    got += n;
+                    if got >= buf.len()
+                        || (got >= 4 && buf[..got].windows(4).any(|w| w == b"\r\n\r\n"))
+                    {
+                        break;
                     }
                 }
-                let head = String::from_utf8_lossy(&buf[..got]);
-                let target = head
-                    .lines()
-                    .next()
-                    .unwrap_or("")
-                    .split_whitespace()
-                    .nth(1)
-                    .unwrap_or("");
-                if target.starts_with(CALLBACK_PATH) {
-                    match parse_pasted_code(&format!("http://x{target}")) {
-                        Ok((code, state)) if state.as_deref() == Some(expected_state) => {
-                            let _ = stream.write_all(ok_page.as_bytes());
-                            return Ok(code);
-                        }
-                        _ => {
-                            let _ = stream.write_all(err_page.as_bytes());
-                        }
-                    }
-                } else {
+            }
+        }
+        let head = String::from_utf8_lossy(&buf[..got]);
+        let target = head
+            .lines()
+            .next()
+            .unwrap_or("")
+            .split_whitespace()
+            .nth(1)
+            .unwrap_or("");
+        if target.starts_with(CALLBACK_PATH) {
+            match parse_pasted_code(&format!("http://x{target}")) {
+                Ok((code, state)) if state.as_deref() == Some(expected_state) => {
+                    let _ = stream.write_all(ok_page.as_bytes());
+                    return Ok(code);
+                }
+                _ => {
                     let _ = stream.write_all(err_page.as_bytes());
                 }
             }
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                std::thread::sleep(Duration::from_millis(100));
-            }
-            Err(e) => anyhow::bail!("accept: {e}"),
+        } else {
+            let _ = stream.write_all(err_page.as_bytes());
         }
     }
-    anyhow::bail!("timed out waiting for the browser callback — rerun with --device (headless) or --manual-code")
+    anyhow::bail!(
+        "timed out waiting for the browser callback. If the browser shows approval succeeded \
+        but localhost:{CALLBACK_PORT} is unreachable (e.g. rustez runs on another machine), copy \
+        the full address-bar URL — it still carries ?code=… — and rerun with --paste. \
+        Headless machines: rerun with --device."
+    )
 }
 
 /// Best-effort browser open (always print the URL too).
@@ -332,6 +357,19 @@ pub fn open_browser(url: &str) {
     #[cfg(not(target_os = "windows"))]
     let args: &[&str] = &[url];
     let _ = std::process::Command::new(prog).args(args).spawn();
+}
+
+/// Quick connectivity preflight to the OAuth issuer. Any HTTP status counts as
+/// reachable (even 4xx) — only transport/TLS/DNS failures bail, so a dead
+/// network fails here with a clear message instead of a confusing browser page.
+pub async fn preflight() -> anyhow::Result<()> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .build()?;
+    client.get(AUTHORIZE_URL).send().await.map_err(|e| {
+        anyhow::anyhow!("cannot reach auth.openai.com ({e:#}) — check network/VPN/DNS, then retry")
+    })?;
+    Ok(())
 }
 
 /// Exchange an authorization `code` for tokens. `existing_refresh` is reused when

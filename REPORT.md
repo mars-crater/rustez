@@ -155,7 +155,20 @@ Verified after trim: `fmt` ok, `clippy -D warnings` ok, `test` ok (0 tests).
   screen through Confirm; `fmt`/`clippy -D warnings` clean, full workspace green.
 - Run: `just onboard` (TTY) — real browser dance still needs a human at Confirm.
 
-## 12. Next
+## 12. Fix (2026-09-04) — localhost callback robustness + recovery guidance
+
+- Callback server now binds **both** `127.0.0.1:1455` and `[::1]:1455` (best-effort):
+  browsers disagree on what `localhost` means, and the wrong half showed as
+  "site can't be reached".
+- New `preflight()`: any HTTP status from `auth.openai.com` counts as reachable;
+  transport/TLS/DNS failures abort fast with a network/VPN/DNS hint instead of a
+  confusing browser page. Wired into browser + device dance starts.
+- Failure paths now spell out the recovery: approval succeeded but localhost
+  unreachable → copy the address-bar URL (`?code=…` survives) → rerun with
+  `--paste`; headless → `--device`. Same hint on the TUI Failed screen.
+- Verify: `fmt`/`clippy -D warnings` clean, full workspace green.
+
+## 13. Next
 
 - Still TODO (needs onboarding specs): JSON5/`$include`/exec secrets, WS/RPC+pairing, Discord start/send, provider chat+`sub_usage` poll, full wizard fields+test/apply, focused-node UI components.
 - Run: `EZ_CONFIG_PATH=./rustez.json cargo run -p rustez -- doctor|status|gateway`.
