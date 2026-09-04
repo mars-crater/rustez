@@ -180,7 +180,19 @@ Verified after trim: `fmt` ok, `clippy -D warnings` ok, `test` ok (0 tests).
 - Verify: `fmt`/`clippy -D warnings` clean, workspace green incl. 2 new oauth tests
   (quoted-URL paste, pending roundtrip + perms + redacted Debug).
 
-## 14. Next
+## 14. Fix (2026-09-04) — wrapped authorize URL (was truncated, broke approvals)
+
+- Root cause of the `invalid_state` refusal: ratatui `Paragraph` truncates lines
+  wider than the area unless `.wrap()` is set, and the ~500-char authorize URL on
+  the TUI paste screen was cut at terminal width. Copying the visible URL sent a
+  broken request, which the provider refused.
+- All 7 content paragraphs now `.wrap(Wrap { trim: false })`; paste screen adds a
+  "copy it whole" hint.
+- Regression test `paste_screen_wraps_full_authorize_url` renders into a 60-col
+  `TestBackend` and asserts the URL tail (`code_challenge_method`, `state=`) survives.
+- Verify: `fmt`/`clippy -D warnings` clean, workspace green.
+
+## 15. Next
 
 - Still TODO (needs onboarding specs): JSON5/`$include`/exec secrets, WS/RPC+pairing, Discord start/send, provider chat+`sub_usage` poll, full wizard fields+test/apply, focused-node UI components.
 - Run: `EZ_CONFIG_PATH=./rustez.json cargo run -p rustez -- doctor|status|gateway`.

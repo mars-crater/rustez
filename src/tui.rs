@@ -423,7 +423,9 @@ fn draw_welcome(f: &mut Frame, area: Rect) {
         Line::from("then points a setup agent at docs/SETUP.md for the rest."),
     ];
     f.render_widget(
-        Paragraph::new(text).block(Block::default().title("Welcome")),
+        Paragraph::new(text)
+            .block(Block::default().title("Welcome"))
+            .wrap(Wrap { trim: false }),
         area,
     );
 }
@@ -472,7 +474,9 @@ fn draw_input(f: &mut Frame, area: Rect, title: &str, label: &str, buf: &str, pl
     };
     let text = vec![Line::from(label), Line::from(""), shown];
     f.render_widget(
-        Paragraph::new(text).block(Block::default().title(title).borders(Borders::ALL)),
+        Paragraph::new(text)
+            .block(Block::default().title(title).borders(Borders::ALL))
+            .wrap(Wrap { trim: false }),
         area,
     );
 }
@@ -480,6 +484,7 @@ fn draw_input(f: &mut Frame, area: Rect, title: &str, label: &str, buf: &str, pl
 fn draw_paste(f: &mut Frame, area: Rect, app: &App) {
     let mut lines = vec![
         Line::from("Open this URL, approve, then paste the code or full redirect URL:"),
+        Line::from("(it wraps across lines — copy it whole)"),
         Line::from(""),
     ];
     match &app.dance {
@@ -506,7 +511,9 @@ fn draw_paste(f: &mut Frame, area: Rect, app: &App) {
         )]));
     }
     f.render_widget(
-        Paragraph::new(lines).block(Block::default().title("Paste").borders(Borders::ALL)),
+        Paragraph::new(lines)
+            .block(Block::default().title("Paste").borders(Borders::ALL))
+            .wrap(Wrap { trim: false }),
         area,
     );
 }
@@ -533,7 +540,9 @@ fn draw_confirm(f: &mut Frame, area: Rect, app: &App) {
         "then the wizard writes rustez.json + docs/SETUP.md.",
     ));
     f.render_widget(
-        Paragraph::new(lines).block(Block::default().title("Confirm").borders(Borders::ALL)),
+        Paragraph::new(lines)
+            .block(Block::default().title("Confirm").borders(Borders::ALL))
+            .wrap(Wrap { trim: false }),
         area,
     );
 }
@@ -555,7 +564,9 @@ fn draw_running(f: &mut Frame, area: Rect, app: &App) {
         .collect();
     lines.extend(tail);
     f.render_widget(
-        Paragraph::new(lines).block(Block::default().title("Working").borders(Borders::ALL)),
+        Paragraph::new(lines)
+            .block(Block::default().title("Working").borders(Borders::ALL))
+            .wrap(Wrap { trim: false }),
         area,
     );
 }
@@ -582,7 +593,9 @@ fn draw_done(f: &mut Frame, area: Rect, app: &App) {
         "Discord → usage → Qdrant → Proton Pass → email.",
     ));
     f.render_widget(
-        Paragraph::new(lines).block(Block::default().title("Done").borders(Borders::ALL)),
+        Paragraph::new(lines)
+            .block(Block::default().title("Done").borders(Borders::ALL))
+            .wrap(Wrap { trim: false }),
         area,
     );
 }
@@ -605,7 +618,9 @@ fn draw_failed(f: &mut Frame, area: Rect, app: &App) {
     lines.push(Line::from("(saved verifier — no need to approve again)."));
     lines.push(Line::from("Headless? rerun with the device method."));
     f.render_widget(
-        Paragraph::new(lines).block(Block::default().title("Failed").borders(Borders::ALL)),
+        Paragraph::new(lines)
+            .block(Block::default().title("Failed").borders(Borders::ALL))
+            .wrap(Wrap { trim: false }),
         area,
     );
 }
@@ -742,5 +757,37 @@ mod tests {
         a.step = Step::Running;
         a.on_key(KeyCode::Char('c'), KeyModifiers::CONTROL);
         assert!(a.quit);
+    }
+
+    #[test]
+    fn paste_screen_wraps_full_authorize_url() {
+        use ratatui::backend::TestBackend;
+        let mut a = app();
+        a.begin_paste();
+        a.step = Step::PasteCode;
+        let url = a.dance.as_ref().expect("dance").url.clone();
+        assert!(url.len() > 400, "test needs a realistically long url");
+        // Narrow terminal: without wrapping, the tail (state=…) would be cut off.
+        // Box-drawing cells are stripped so wrapped segments rejoin for matching.
+        let backend = TestBackend::new(60, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| draw(f, &a)).expect("draw paste screen");
+        let mut text = String::new();
+        let buf = terminal.backend().buffer();
+        for y in 0..buf.area.height {
+            for x in 0..buf.area.width {
+                let s = buf[(x, y)].symbol();
+                if !matches!(s, "│" | "─" | "┌" | "┐" | "└" | "┘") {
+                    text.push_str(s);
+                }
+            }
+            text.push('\n');
+        }
+        let flat: String = text.split_whitespace().collect();
+        assert!(
+            flat.contains("code_challenge_method=S256"),
+            "wrapped url must survive rendering"
+        );
+        assert!(flat.contains("state="), "url tail must survive rendering");
     }
 }
