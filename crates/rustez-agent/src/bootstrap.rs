@@ -96,6 +96,7 @@ pub fn write_setup_doc(
     let body = format!(
         "---\nprovider: {provider}\nmodel: {model}\nconfig: {config_path}\nstatus: bootstrapped\n---\n\
         # RustEZ setup — resume from here\n\n\
+        New here? Read docs/AGENT.md first — the shared manual for any agent working with RustEZ.\n\n\
         {ping_line}\n{rest}\n\
         ## Agent\n\n\
         {prompt}\n"

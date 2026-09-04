@@ -102,7 +102,15 @@ Verified after trim: `fmt` ok, `clippy -D warnings` ok, `test` ok (0 tests).
   manual smoke: onboard → SETUP.md with 6-item checklist + agent pointer, doctor shows `openai:true`.
 - Run: `just onboard -- --token $T --model gpt-5.6-sol --non-interactive --skip-test`.
 
-## 8. Next (needs live values to go further)
+## 8. Build slice 7 (2026-09-04, done) — agent-readable docs
+
+- `docs/AGENT.md` (committed): shared manual for anyone's agent — repo map, just commands + gates,
+  trimmed config reference, API table, wizard table with env hints, resume protocol, conventions.
+- Runtime `docs/SETUP.md` stays per-machine (gitignored) and now opens with
+  "New here? Read docs/AGENT.md first". `README.md` points agents at it too.
+- Verify: `fmt` ok, `clippy -D warnings` ok, `test` ok (32 suites).
+
+## 9. Next (needs live values to go further)
 
 - Still TODO (needs onboarding specs): JSON5/`$include`/exec secrets, WS/RPC+pairing, Discord start/send, provider chat+`sub_usage` poll, full wizard fields+test/apply, focused-node UI components.
 - Run: `EZ_CONFIG_PATH=./rustez.json cargo run -p rustez -- doctor|status|gateway`.

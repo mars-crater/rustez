@@ -41,3 +41,4 @@ just lint   # clippy, warnings denied
 ```
 
 See `REPORT.md` (work ledger) and `TODO.md` (deferred scope).
+Agents: start with `docs/AGENT.md` — the shared manual for working with RustEZ.
