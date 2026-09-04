@@ -1,0 +1,12 @@
+[package]
+name = "rustez-images"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+
+[lints]
+workspace = true

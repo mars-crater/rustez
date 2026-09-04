@@ -1,0 +1,71 @@
+[workspace]
+members = [
+  "crates/rustez-config",
+  "crates/rustez-compat",
+  "crates/rustez-gateway",
+  "crates/rustez-agent",
+  "crates/rustez-channels",
+  "crates/rustez-memory",
+  "crates/rustez-voice",
+  "crates/rustez-images",
+  "crates/rustez-secrets",
+  "crates/rustez-email",
+  "crates/rustez-usage",
+  "crates/rustez-mcp",
+  "crates/rustez-cli",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.lints.clippy]
+upper_case_acronyms = "deny"
+wrong_self_convention = "deny"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[package]
+name = "rustez"
+version = "0.1.0"
+edition = "2021"
+description = "RustEZ — lightweight blazing-fast OpenClaw-compatible agent gateway (binary: rustez, alias ez)"
+license = "MIT"
+
+[[bin]]
+name = "rustez"
+path = "src/main.rs"
+
+[dependencies]
+rustez-config = { path = "crates/rustez-config" }
+rustez-gateway = { path = "crates/rustez-gateway" }
+rustez-cli = { path = "crates/rustez-cli" }
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+anyhow = "1"
+axum = "0.7"
+http = "1"
+http-body-util = "0.1"
+rustez-channels = { path = "crates/rustez-channels" }
+rustez-config = { path = "crates/rustez-config" }
+rustez-email = { path = "crates/rustez-email" }
+rustez-gateway = { path = "crates/rustez-gateway" }
+rustez-images = { path = "crates/rustez-images" }
+rustez-memory = { path = "crates/rustez-memory" }
+rustez-secrets = { path = "crates/rustez-secrets" }
+rustez-usage = { path = "crates/rustez-usage" }
+rustez-voice = { path = "crates/rustez-voice" }
+serde_json = "1"
+tempfile = "3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tower = { version = "0.5", features = ["util"] }
