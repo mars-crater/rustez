@@ -76,7 +76,17 @@ Verified after trim: `fmt` ok, `clippy -D warnings` ok, `test` ok (0 tests).
 - Verify via just (evidence): `just check` ok, `just test` ok (25×0-pass + 1×1-pass + 1×2-pass suites), `just lint` ok, `just smoke` → `SMOKE_OK` (doctor ok, health `{"ok":true}`, discord wizard supported:true).
 - Run: `just doctor|just gateway|just wiz proton-pass|just smoke`.
 
-## 6. Next (needs onboarding values to go live)
+## 6. Build slice 5 (2026-09-04, done) — e2e per functionality + repo
+
+- `tests/`: `e2e_health` (1: /healthz ok+version), `e2e_config` (1: defaults + LIVESECRET→`***` masking + port reflect),
+  `e2e_wizards` (2: 7 impls × auth(env_hint)+config steps; telegram unsupported),
+  `e2e_cli` (3: status port, doctor empty/discord, invalid JSON fails),
+  `e2e_traits` (3: sub-% math, SecretInput/AllowFrom round-trip, dummy impls run).
+- `just e2e` → `cargo test --test 'e2e_*'`: 10 passed. Full `cargo test --workspace`: all green (13 new).
+- Repo: `https://github.com/mars-crater/rustez` (public, main, Cargo.lock committed). Remote `origin` set.
+- Run: `just e2e|just smoke|just lint`.
+
+## 7. Next (needs onboarding values to go live)
 
 - Still TODO (needs onboarding specs): JSON5/`$include`/exec secrets, WS/RPC+pairing, Discord start/send, provider chat+`sub_usage` poll, full wizard fields+test/apply, focused-node UI components.
 - Run: `EZ_CONFIG_PATH=./rustez.json cargo run -p rustez -- doctor|status|gateway`.
