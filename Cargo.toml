@@ -40,10 +40,12 @@ name = "rustez"
 path = "src/main.rs"
 
 [dependencies]
+rustez-agent = { path = "crates/rustez-agent" }
 rustez-config = { path = "crates/rustez-config" }
 rustez-gateway = { path = "crates/rustez-gateway" }
 rustez-cli = { path = "crates/rustez-cli" }
 clap = { version = "4", features = ["derive"] }
+serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"

@@ -61,3 +61,53 @@ fn doctor_fails_on_invalid_json() {
         .expect("run doctor bad json");
     assert!(!out.status.success(), "doctor must fail on invalid JSON");
 }
+
+#[test]
+fn onboard_writes_config_and_docs_handoff() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = dir.path().join("rustez.json");
+    let docs = dir.path().join("SETUP.md");
+    let out = Command::new(bin())
+        .args([
+            "onboard",
+            "--provider",
+            "openai",
+            "--token",
+            "smoke-token",
+            "--model",
+            "test-model",
+            "--non-interactive",
+            "--skip-test",
+            "--docs",
+        ])
+        .arg(&docs)
+        .env("EZ_CONFIG_PATH", &cfg)
+        .output()
+        .expect("run onboard");
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let cfg_text = std::fs::read_to_string(&cfg).unwrap();
+    assert!(cfg_text.contains("test-model"), "{cfg_text}");
+    assert!(
+        !cfg_text.contains("smoke-token"),
+        "token must not be inlined by default"
+    );
+    let docs_text = std::fs::read_to_string(&docs).unwrap();
+    assert!(docs_text.contains("provider: openai"), "{docs_text}");
+    assert!(docs_text.contains("test-model"), "{docs_text}");
+    assert!(docs_text.contains("never print secrets"), "{docs_text}");
+    assert!(docs_text.contains("- [ ]"), "resume checklist missing");
+}
+
+#[test]
+fn onboard_rejects_unknown_provider() {
+    let out = Command::new(bin())
+        .args(["onboard", "--provider", "telegram"])
+        .env("EZ_CONFIG_PATH", "/nonexistent-rustez-e2e-xyz.json")
+        .output()
+        .expect("run onboard bad provider");
+    assert!(!out.status.success());
+}

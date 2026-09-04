@@ -86,7 +86,23 @@ Verified after trim: `fmt` ok, `clippy -D warnings` ok, `test` ok (0 tests).
 - Repo: `https://github.com/mars-crater/rustez` (public, main, Cargo.lock committed). Remote `origin` set.
 - Run: `just e2e|just smoke|just lint`.
 
-## 7. Next (needs onboarding values to go live)
+## 7. Build slice 6 (2026-09-04, done) — console bootstrap + OpenAI wizard + docs handoff
+
+- `rustez onboard [--provider openai] [--token] [--model] [--docs docs/SETUP.md] [--non-interactive] [--skip-test] [--store-literal]`:
+  welcome banner → token/model prompts (defaults offered; non-interactive uses flags+defaults) →
+  live `ping_openai` test (chat/completions `ping`, max_tokens 8; `--skip-test` leaves item unchecked) →
+  writes `rustez.json` (env-ref `{source:env,provider:default,id:EZ_OPENAI_SUB_TOKEN}` by default, literal only with flag + warning) +
+  writes `docs/SETUP.md` (front-matter provider/model/config/status + checklist + Agent section).
+- `EzAgentBootstrap{provider,model,docs}` + `prompt()` points the setup agent at the handoff doc
+  ("continue with the next unchecked wizard item and update the checklist… never print secrets");
+  resume order: Discord → usage → Qdrant → Proton Pass → email.
+- `gateway` with no providers now prints the welcome hint; `doctor` reports `setup d/t (docs/SETUP.md)` when present.
+- New dep (justified by test-it-out): `reqwest` rustls-minimal in `rustez-agent` only; token never logged.
+- Verify: `fmt` ok, `clippy -D warnings` ok, `test` ok (32 suites incl. 3 bootstrap unit + 2 new e2e CLI onboard);
+  manual smoke: onboard → SETUP.md with 6-item checklist + agent pointer, doctor shows `openai:true`.
+- Run: `just onboard -- --token $T --model gpt-5.6-sol --non-interactive --skip-test`.
+
+## 8. Next (needs live values to go further)
 
 - Still TODO (needs onboarding specs): JSON5/`$include`/exec secrets, WS/RPC+pairing, Discord start/send, provider chat+`sub_usage` poll, full wizard fields+test/apply, focused-node UI components.
 - Run: `EZ_CONFIG_PATH=./rustez.json cargo run -p rustez -- doctor|status|gateway`.

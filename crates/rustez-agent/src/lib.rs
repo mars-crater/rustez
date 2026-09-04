@@ -2,6 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Bootstrap: welcome banner, OpenAI-first onboard helpers, docs handoff.
+pub mod bootstrap;
+
 /// Chat request (minimal).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EzChatReq {

@@ -7,7 +7,13 @@ license.workspace = true
 [dependencies]
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-manual-roots"] }
+rustez-config = { path = "../rustez-config" }
 rustez-usage = { path = "../rustez-usage" }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tempfile = "3"
