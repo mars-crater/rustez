@@ -11,7 +11,7 @@
 - [x] discord (v1 only)
 
 ## Providers (`trait EzProvider` done)
-- [x] openai (subscription auth) — v1
+- [x] openai (OAuth) — v1
 - [x] opencode-go (API token) — v1
 - [x] chutes (API token) — v1
 - [ ] anthropic-messages, google, mistral, ollama, lmstudio, vllm, sglang, voyage, bedrock, deepinfra

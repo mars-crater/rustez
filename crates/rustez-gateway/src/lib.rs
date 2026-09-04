@@ -182,11 +182,11 @@ impl EzWizard {
             "openai" => vec![
                 auth_step(
                     "auth",
-                    "Subscription auth — OAuth/setup token, never a raw API key in v1.",
+                    "OAuth — authorize in the browser flow, paste the access token. Never a raw API key.",
                     vec![EzField::auth(
-                        "subToken",
-                        "Subscription token",
-                        "EZ_OPENAI_SUB_TOKEN",
+                        "oauthToken",
+                        "OAuth access token",
+                        "EZ_OPENAI_OAUTH_TOKEN",
                     )],
                 ),
                 config_step(
@@ -340,5 +340,17 @@ mod tests {
             );
         }
         assert!(!EzWizard::stub("telegram").supported);
+    }
+
+    #[test]
+    fn openai_auth_is_oauth() {
+        let w = EzWizard::stub("openai");
+        let auth = &w.steps[0].fields;
+        assert!(
+            auth.iter().any(|f| f.key == "oauthToken"
+                && f.auth
+                && f.env_hint.as_deref() == Some("EZ_OPENAI_OAUTH_TOKEN")),
+            "openai auth must be the OAuth token, not a subscription/API token: {auth:?}"
+        );
     }
 }

@@ -110,7 +110,14 @@ Verified after trim: `fmt` ok, `clippy -D warnings` ok, `test` ok (0 tests).
   "New here? Read docs/AGENT.md first". `README.md` points agents at it too.
 - Verify: `fmt` ok, `clippy -D warnings` ok, `test` ok (32 suites).
 
-## 9. Next (needs live values to go further)
+## 9. Correction (2026-09-04) — OpenAI is OAuth, not subscription token
+
+- Earlier slices said "subscription token" (`subToken`/`EZ_OPENAI_SUB_TOKEN` in wizard, onboard, README, AGENT.md).
+  Corrected to OAuth: wizard field `oauthToken` → `EZ_OPENAI_OAUTH_TOKEN`, onboard stores the OAuth env-ref,
+  docs updated. `ping_openai` already uses Bearer auth so it works with OAuth access tokens unchanged.
+- Pinned by new unit test `openai_auth_is_oauth`. History above left intact.
+
+## 10. Next (needs live values to go further)
 
 - Still TODO (needs onboarding specs): JSON5/`$include`/exec secrets, WS/RPC+pairing, Discord start/send, provider chat+`sub_usage` poll, full wizard fields+test/apply, focused-node UI components.
 - Run: `EZ_CONFIG_PATH=./rustez.json cargo run -p rustez -- doctor|status|gateway`.

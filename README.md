@@ -22,7 +22,7 @@ Optional: `just install` puts `rustez` on `~/.cargo/bin`.
 # First run: welcome + OpenAI wizard, writes rustez.json + docs/SETUP.md
 just onboard
 # Non-interactive:
-just onboard -- --token $EZ_OPENAI_SUB_TOKEN --model gpt-5.6-sol --non-interactive
+just onboard -- --token $EZ_OPENAI_OAUTH_TOKEN --model gpt-5.6-sol --non-interactive
 
 # Start the gateway (127.0.0.1:18790)
 just gateway

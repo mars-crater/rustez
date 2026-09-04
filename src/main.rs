@@ -32,7 +32,7 @@ enum EzCmd {
         /// Provider id (v1: only `openai` is implemented)
         #[arg(long, default_value = "openai")]
         provider: String,
-        /// Subscription token (else prompted; never echoed)
+        /// OAuth token (else prompted; never echoed)
         #[arg(long)]
         token: Option<String>,
         /// Model id (else prompted, default offered)
@@ -174,7 +174,7 @@ fn onboard(
             std::process::exit(2);
         }
         _ => prompt(
-            "OpenAI subscription token (input hidden is TODO — check shoulder)",
+            "OpenAI OAuth token (input hidden is TODO — check shoulder)",
             None,
         ),
     };
@@ -227,12 +227,12 @@ fn onboard(
         EzSecretInput::Literal(token)
     } else {
         eprintln!(
-            "storing env-ref; export EZ_OPENAI_SUB_TOKEN=<token> before running the gateway."
+            "storing env-ref; export EZ_OPENAI_OAUTH_TOKEN=<token> before running the gateway."
         );
         EzSecretInput::Ref(EzSecretRef {
             source: "env".to_string(),
             provider: "default".to_string(),
-            id: "EZ_OPENAI_SUB_TOKEN".to_string(),
+            id: "EZ_OPENAI_OAUTH_TOKEN".to_string(),
         })
     };
 

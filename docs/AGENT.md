@@ -87,7 +87,7 @@ secrets into chat when avoidable.
 | Key           | Auth (env)                          | Config fields                          |
 | ------------- | ----------------------------------- | -------------------------------------- |
 | `discord`     | token → `EZ_DISCORD_TOKEN`          | dmPolicy/allowFrom/requireMention/historyLimit |
-| `openai`      | subToken → `EZ_OPENAI_SUB_TOKEN`    | model/pollSecs                         |
+| `openai`      | oauthToken → `EZ_OPENAI_OAUTH_TOKEN`  | model/pollSecs                         |
 | `opencode-go` | apiToken → `EZ_OPENCODEGO_TOKEN`    | baseUrl/models                         |
 | `chutes`      | apiToken → `EZ_CHUTES_TOKEN`        | baseUrl/models                         |
 | `qdrant`      | apiKey? → `RUSTEZ_QDRANT_KEY`       | url/collection/embedModel              |
