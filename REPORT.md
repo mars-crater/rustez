@@ -192,7 +192,20 @@ Verified after trim: `fmt` ok, `clippy -D warnings` ok, `test` ok (0 tests).
   `TestBackend` and asserts the URL tail (`code_challenge_method`, `state=`) survives.
 - Verify: `fmt`/`clippy -D warnings` clean, workspace green.
 
-## 15. Next
+## 15. Fix (2026-09-04) — TLS roots: native, not manual (caused UnknownIssuer)
+
+- Root cause of `invalid peer certificate: UnknownIssuer` at the token exchange:
+  reqwest was built with `rustls-tls-manual-roots`, which ships an EMPTY root
+  store — every TLS handshake failed. Chosen earlier for "lightweight", wrong call.
+- Switched to `rustls-tls-native-roots` (system CA store; also honors
+  corporate-proxy CAs, unlike bundled webpki).
+- Proved both directions live against `auth.openai.com`: manual-roots build fails
+  TLS, native-roots build `PREFLIGHT_OK` (temp example, removed after).
+- `net_err()` helper now translates transport failures at all 5 call sites;
+  certificate errors point at proxy/VPN CA setup instead of a raw reqwest dump.
+- Verify: `fmt`/`clippy -D warnings` clean, workspace green.
+
+## 16. Next
 
 - Still TODO (needs onboarding specs): JSON5/`$include`/exec secrets, WS/RPC+pairing, Discord start/send, provider chat+`sub_usage` poll, full wizard fields+test/apply, focused-node UI components.
 - Run: `EZ_CONFIG_PATH=./rustez.json cargo run -p rustez -- doctor|status|gateway`.

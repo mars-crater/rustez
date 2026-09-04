@@ -450,9 +450,25 @@ pub async fn preflight() -> anyhow::Result<()> {
         .timeout(Duration::from_secs(8))
         .build()?;
     client.get(AUTHORIZE_URL).send().await.map_err(|e| {
-        anyhow::anyhow!("cannot reach auth.openai.com ({e:#}) — check network/VPN/DNS, then retry")
+        net_err(
+            e,
+            "cannot reach auth.openai.com — check network/VPN/DNS, then retry",
+        )
     })?;
     Ok(())
+}
+
+/// Human-readable transport error: certificate failures point at proxy/CA setup.
+fn net_err(e: reqwest::Error, what: &str) -> anyhow::Error {
+    let s = format!("{e:#}");
+    let low = s.to_lowercase();
+    if low.contains("certificate") || low.contains("unknownissuer") || low.contains("handshake") {
+        anyhow::anyhow!(
+            "{what}: TLS failed ({s}) — behind a corporate proxy/VPN? its CA must be in the system store"
+        )
+    } else {
+        anyhow::anyhow!("{what}: {s}")
+    }
 }
 
 /// Exchange an authorization `code` for tokens. `existing_refresh` is reused when
@@ -506,7 +522,12 @@ async fn exchange_like(
         .build()?;
     let mut form = vec![("client_id", CHATGPT_CLIENT_ID)];
     form.extend_from_slice(extra);
-    let res = client.post(TOKEN_URL).form(&form).send().await?;
+    let res = client
+        .post(TOKEN_URL)
+        .form(&form)
+        .send()
+        .await
+        .map_err(|e| net_err(e, "token endpoint unreachable"))?;
     let status = res.status();
     let body: serde_json::Value = res.json().await.unwrap_or(serde_json::Value::Null);
     if !status.is_success() {
@@ -642,7 +663,8 @@ pub async fn chat_codex(
             "store": false,
         }))
         .send()
-        .await?;
+        .await
+        .map_err(|e| net_err(e, "codex backend unreachable"))?;
     let status = res.status();
     let text = res.text().await.unwrap_or_default();
     if !status.is_success() {
@@ -691,7 +713,8 @@ pub async fn device_usercode() -> anyhow::Result<(String, String, u64)> {
         .header("originator", "rustez")
         .json(&serde_json::json!({"client_id": CHATGPT_CLIENT_ID}))
         .send()
-        .await?;
+        .await
+        .map_err(|e| net_err(e, "device flow unreachable"))?;
     let body: serde_json::Value = res.json().await.unwrap_or(serde_json::Value::Null);
     let id = body
         .get("device_auth_id")
@@ -738,7 +761,8 @@ pub async fn device_poll(
                 "user_code": user_code,
             }))
             .send()
-            .await?;
+            .await
+            .map_err(|e| net_err(e, "device poll unreachable"))?;
         match res.status().as_u16() {
             // Pending approval — keep polling.
             403 | 404 => {
