@@ -39,9 +39,13 @@ run *ARGS:
 doctor:
     cargo run -p rustez -- doctor
 
-# first-run bootstrap: welcome + OpenAI wizard + docs handoff
+# first-run bootstrap: welcome + OpenAI dance + docs handoff
 onboard *ARGS:
     cargo run -p rustez -- onboard {{ARGS}}
+
+# ChatGPT OAuth: login (browser dance) / status / logout, e.g. just auth login --device
+auth *ARGS:
+    cargo run -p rustez -- auth {{ARGS}}
 
 # serve gateway on 127.0.0.1:{port} (default 18790)
 gateway:

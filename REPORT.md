@@ -117,7 +117,30 @@ Verified after trim: `fmt` ok, `clippy -D warnings` ok, `test` ok (0 tests).
   docs updated. `ping_openai` already uses Bearer auth so it works with OAuth access tokens unchanged.
 - Pinned by new unit test `openai_auth_is_oauth`. History above left intact.
 
-## 10. Next (needs live values to go further)
+## 10. Build slice 8 (2026-09-04, done) — ChatGPT OAuth dance, no token to paste
+
+- Researched upstream (`openclaw/openclaw:extensions/openai`) + Codex OAuth pattern:
+  public client `app_EMoamEEZ73f0CkXaXp7hrann`, PKCE S256, `auth.openai.com` authorize/token,
+  scope `openid profile email offline_access`, `localhost:1455` callback, device-code fallback,
+  rotating refresh, chat via `chatgpt.com/backend-api/codex` (Bearer + `ChatGPT-Account-Id`).
+- New `rustez-agent::oauth`: PKCE/state/authorize-URL builders, std-only one-shot `:1455`
+  callback server (state-validated), device flow (usercode → poll → exchange), code/refresh
+  exchange, `id_token` identity decode, `0600` store (`~/.rustez/auth/openai.json`,
+  `RUSTEZ_AUTH_DIR` override), margin auto-refresh, SSE `output_text.delta` chat.
+- CLI: `auth login [--device|--paste|--no-open]` / `auth status` / `auth logout`;
+  `onboard --provider openai` runs the dance (+`--device/--paste/--print-url/--paste-code+--verifier`),
+  then a live codex ping, then `rustez.json` (no secret inside) + `docs/SETUP.md`.
+- Wizard: openai steps describe the dance, zero required secret fields (pinned by tests).
+- Secrets hygiene: `EzAuthProfile` has redacted `Debug`; error paths redact token material.
+- New deps (justified): `base64`, `rand`, `sha2` in `rustez-agent` only.
+- Verify: `fmt` ok, `clippy -D warnings` ok, `test` ok (incl. 6 oauth unit: RFC7636 vector,
+  dance params, paste parse, crafted JWT, SSE, 0600 roundtrip; e2e: print-url JSON,
+  non-interactive rejection, clean auth status, bad-provider login).
+- Manual smoke: `--print-url` emits the exact upstream-shaped authorize URL; `auth status`
+  clean when logged out. Real browser dance needs a human — not yet run end to end.
+- Run: `just auth login` (or `--device` headless).
+
+## 11. Next
 
 - Still TODO (needs onboarding specs): JSON5/`$include`/exec secrets, WS/RPC+pairing, Discord start/send, provider chat+`sub_usage` poll, full wizard fields+test/apply, focused-node UI components.
 - Run: `EZ_CONFIG_PATH=./rustez.json cargo run -p rustez -- doctor|status|gateway`.

@@ -67,6 +67,15 @@ Secrets: `string | {source: env|file|exec|store, provider, id}`. Prefer
 `{source:"env",provider:"default",id:"VAR_NAME"}` over literals. Empty literal = missing.
 `GET /api/config` masks literals to `***` — rely on that, never log values.
 
+ChatGPT OAuth (the `openai` dance — there is no token to paste):
+`rustez auth login` opens `auth.openai.com` (PKCE S256, public Codex client,
+`localhost:1455` callback; `--device` for headless, `--paste` for manual URL paste).
+Creds land in `~/.rustez/auth/openai.json` (`0600`: access, rotating refresh,
+expiry, account id). Runtime auto-refreshes inside a 2-min margin and chats via
+`chatgpt.com/backend-api/codex` (Bearer + `ChatGPT-Account-Id`). `auth status`
+shows state without secrets; `auth logout` deletes. `RUSTEZ_AUTH_DIR` overrides
+the store path (tests use this).
+
 ## 5. Gateway API (port 18790; Node OpenClaw keeps 18789)
 
 | Endpoint               | Purpose                                              |
@@ -87,7 +96,7 @@ secrets into chat when avoidable.
 | Key           | Auth (env)                          | Config fields                          |
 | ------------- | ----------------------------------- | -------------------------------------- |
 | `discord`     | token → `EZ_DISCORD_TOKEN`          | dmPolicy/allowFrom/requireMention/historyLimit |
-| `openai`      | oauthToken → `EZ_OPENAI_OAUTH_TOKEN`  | model/pollSecs                         |
+| `openai`      | browser dance, nothing to paste     | model/pollSecs                         |
 | `opencode-go` | apiToken → `EZ_OPENCODEGO_TOKEN`    | baseUrl/models                         |
 | `chutes`      | apiToken → `EZ_CHUTES_TOKEN`        | baseUrl/models                         |
 | `qdrant`      | apiKey? → `RUSTEZ_QDRANT_KEY`       | url/collection/embedModel              |

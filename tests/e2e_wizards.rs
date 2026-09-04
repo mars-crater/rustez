@@ -7,7 +7,6 @@ use tower::ServiceExt;
 
 const SUPPORTED: &[&str] = &[
     "discord",
-    "openai",
     "opencode-go",
     "chutes",
     "qdrant",
@@ -45,6 +44,29 @@ async fn wizards_carry_auth_and_config() {
             "{key} config step needs a config field"
         );
     }
+}
+
+#[tokio::test]
+async fn openai_is_dance_no_static_token() {
+    let app = rustez_gateway::router();
+    let req = Request::builder()
+        .uri("/api/wizards/openai")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(v["supported"], true);
+    // Dance-based: no required secret field anywhere.
+    let required_secrets = v["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .flat_map(|s| s["fields"].as_array().cloned().unwrap_or_default())
+        .filter(|f| f["auth"] == true && f["required"] == true)
+        .count();
+    assert_eq!(required_secrets, 0, "openai must not demand a pasted token");
 }
 
 #[tokio::test]

@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 
 /// Bootstrap: welcome banner, OpenAI-first onboard helpers, docs handoff.
 pub mod bootstrap;
+/// ChatGPT OAuth dance (browser localhost callback + device fallback).
+pub mod oauth;
 
 /// Chat request (minimal).
 #[derive(Debug, Clone, Serialize, Deserialize)]

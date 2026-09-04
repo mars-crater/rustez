@@ -180,15 +180,26 @@ impl EzWizard {
                 ),
             ],
             "openai" => vec![
-                auth_step(
-                    "auth",
-                    "OAuth — authorize in the browser flow, paste the access token. Never a raw API key.",
-                    vec![EzField::auth(
-                        "oauthToken",
-                        "OAuth access token",
-                        "EZ_OPENAI_OAUTH_TOKEN",
-                    )],
-                ),
+                EzWizardStep {
+                    id: "signin".to_string(),
+                    title: "Sign in".to_string(),
+                    help: "Browser dance — nothing to paste. rustez opens auth.openai.com; \
+                        sign in with your ChatGPT account and approve. Headless machines: \
+                        use the device flow (`rustez auth login --device`)."
+                        .to_string(),
+                    fields: vec![
+                        EzField::cfg("method", "Method", "select", false),
+                        EzField {
+                            key: "authCode".to_string(),
+                            label: "Pasted code/URL (manual fallback only)".to_string(),
+                            kind: "text".to_string(),
+                            required: false,
+                            auth: false,
+                            placeholder: Some("leave empty — the localhost callback catches it".to_string()),
+                            env_hint: None,
+                        },
+                    ],
+                },
                 config_step(
                     "Model + usage poll — maps to providers.openai{models,usage}.",
                     vec![
@@ -318,9 +329,10 @@ mod tests {
 
     #[test]
     fn wizards_carry_auth_and_config() {
+        // Static-secret impls carry auth+config; openai is dance-based (see
+        // openai_auth_is_dance_no_static_token).
         for key in [
             "discord",
-            "openai",
             "opencode-go",
             "chutes",
             "qdrant",
@@ -343,14 +355,21 @@ mod tests {
     }
 
     #[test]
-    fn openai_auth_is_oauth() {
+    fn openai_auth_is_dance_no_static_token() {
         let w = EzWizard::stub("openai");
-        let auth = &w.steps[0].fields;
+        assert_eq!(w.steps.len(), 2);
+        // The dance needs no pasted token: zero required secret fields.
         assert!(
-            auth.iter().any(|f| f.key == "oauthToken"
-                && f.auth
-                && f.env_hint.as_deref() == Some("EZ_OPENAI_OAUTH_TOKEN")),
-            "openai auth must be the OAuth token, not a subscription/API token: {auth:?}"
+            !w.steps
+                .iter()
+                .flat_map(|s| &s.fields)
+                .any(|f| f.auth && f.required),
+            "openai must not require a pasted token — browser dance instead"
+        );
+        let help: String = w.steps.iter().map(|s| s.help.clone()).collect();
+        assert!(
+            help.contains("auth.openai.com") || help.contains("device"),
+            "openai wizard must describe the dance: {help}"
         );
     }
 }

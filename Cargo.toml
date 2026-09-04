@@ -40,6 +40,7 @@ name = "rustez"
 path = "src/main.rs"
 
 [dependencies]
+anyhow = "1"
 rustez-agent = { path = "crates/rustez-agent" }
 rustez-config = { path = "crates/rustez-config" }
 rustez-gateway = { path = "crates/rustez-gateway" }

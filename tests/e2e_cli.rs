@@ -63,51 +63,59 @@ fn doctor_fails_on_invalid_json() {
 }
 
 #[test]
-fn onboard_writes_config_and_docs_handoff() {
-    let dir = tempfile::tempdir().unwrap();
-    let cfg = dir.path().join("rustez.json");
-    let docs = dir.path().join("SETUP.md");
+fn onboard_print_url_needs_no_network() {
     let out = Command::new(bin())
-        .args([
-            "onboard",
-            "--provider",
-            "openai",
-            "--token",
-            "smoke-token",
-            "--model",
-            "test-model",
-            "--non-interactive",
-            "--skip-test",
-            "--docs",
-        ])
-        .arg(&docs)
-        .env("EZ_CONFIG_PATH", &cfg)
+        .args(["onboard", "--provider", "openai", "--print-url"])
+        .env("EZ_CONFIG_PATH", "/nonexistent-rustez-e2e-xyz.json")
         .output()
-        .expect("run onboard");
+        .expect("run onboard --print-url");
     assert!(
         out.status.success(),
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let cfg_text = std::fs::read_to_string(&cfg).unwrap();
-    assert!(cfg_text.contains("test-model"), "{cfg_text}");
+    let v: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("stdout must be JSON handoff");
+    let url = v["url"].as_str().unwrap_or("");
     assert!(
-        !cfg_text.contains("smoke-token"),
-        "token must not be inlined by default"
+        url.contains("https://auth.openai.com/oauth/authorize"),
+        "{url}"
     );
-    let docs_text = std::fs::read_to_string(&docs).unwrap();
-    assert!(docs_text.contains("provider: openai"), "{docs_text}");
-    assert!(docs_text.contains("test-model"), "{docs_text}");
-    assert!(docs_text.contains("never print secrets"), "{docs_text}");
-    assert!(docs_text.contains("- [ ]"), "resume checklist missing");
+    assert!(url.contains("code_challenge"), "{url}");
+    assert!(!v["verifier"].as_str().unwrap_or("").is_empty());
+    assert!(!v["state"].as_str().unwrap_or("").is_empty());
 }
 
 #[test]
-fn onboard_rejects_unknown_provider() {
+fn onboard_non_interactive_needs_paste_handoff() {
     let out = Command::new(bin())
-        .args(["onboard", "--provider", "telegram"])
+        .args(["onboard", "--provider", "openai", "--non-interactive"])
         .env("EZ_CONFIG_PATH", "/nonexistent-rustez-e2e-xyz.json")
         .output()
-        .expect("run onboard bad provider");
+        .expect("run onboard non-interactive");
+    assert!(!out.status.success(), "dance needs a human or --paste-code");
+}
+
+#[test]
+fn auth_status_clean_when_never_logged_in() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = Command::new(bin())
+        .args(["auth", "status", "--provider", "openai"])
+        .env("RUSTEZ_AUTH_DIR", dir.path())
+        .output()
+        .expect("run auth status");
+    assert!(out.status.success());
+    let text = String::from_utf8(out.stdout).unwrap();
+    assert!(text.contains("not logged in"), "{text}");
+    assert!(!text.contains("eyJ"), "must never leak token material");
+}
+
+#[test]
+fn auth_login_rejects_unknown_provider() {
+    let out = Command::new(bin())
+        .args(["auth", "login", "--provider", "telegram"])
+        .env("RUSTEZ_AUTH_DIR", "/nonexistent-rustez-e2e-xyz")
+        .output()
+        .expect("run auth login bad provider");
     assert!(!out.status.success());
 }

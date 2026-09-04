@@ -127,49 +127,6 @@ pub fn setup_progress(path: &str) -> Option<(usize, usize)> {
     }
 }
 
-/// Minimal OpenAI chat ping (proves the token+model work; test-it-out step).
-/// Never logs the token. `base_url` empty → `https://api.openai.com/v1`.
-pub async fn ping_openai(base_url: &str, token: &str, model: &str) -> anyhow::Result<String> {
-    let base = if base_url.trim().is_empty() {
-        "https://api.openai.com/v1".to_string()
-    } else {
-        base_url.trim_end_matches('/').to_string()
-    };
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(20))
-        .build()?;
-    let res = client
-        .post(format!("{base}/chat/completions"))
-        .bearer_auth(token)
-        .json(&serde_json::json!({
-            "model": model,
-            "messages": [{"role": "user", "content": "ping"}],
-            "max_tokens": 8,
-        }))
-        .send()
-        .await
-        .map_err(|e| anyhow::anyhow!("openai ping request failed: {e}"))?;
-    let status = res.status();
-    let body: serde_json::Value = res
-        .json()
-        .await
-        .map_err(|e| anyhow::anyhow!("openai ping bad body: {e}"))?;
-    if !status.is_success() {
-        let msg = body
-            .get("error")
-            .and_then(|e| e.get("message"))
-            .and_then(|m| m.as_str())
-            .unwrap_or("unknown provider error");
-        anyhow::bail!("openai ping {status}: {msg}");
-    }
-    let text = body
-        .pointer("/choices/0/message/content")
-        .and_then(|c| c.as_str())
-        .unwrap_or("ok")
-        .to_string();
-    Ok(text)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
