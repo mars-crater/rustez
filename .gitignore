@@ -1,4 +1,13 @@
 /target/
 *.swp
 .DS_Store
-.rustez.json
+*.log
+
+# Local runtime files (may hold literal tokens / per-machine state)
+/rustez.json
+docs/SETUP.md
+
+# Future console UI build outputs
+node_modules/
+ui/dist/
+ui/node_modules/
