@@ -140,7 +140,22 @@ Verified after trim: `fmt` ok, `clippy -D warnings` ok, `test` ok (0 tests).
   clean when logged out. Real browser dance needs a human — not yet run end to end.
 - Run: `just auth login` (or `--device` headless).
 
-## 11. Next
+## 11. Build slice 9 (2026-09-04, done) — onboard TUI for the dance
+
+- `src/tui.rs` (ratatui 0.29 + crossterm 0.28, binary-only): welcome → provider
+  (openai enabled, others greyed TODO) → method [browser|device|paste] → model →
+  paste-code (paste method only, shows its authorize URL, validates state) →
+  confirm (summary + ping toggle) → live dance with spinner/log → done/failed.
+- Shared core: prompt CLI refactored into `run_flow(&FlowParams, logger)` used by both
+  frontends; TUI runs it on a worker thread via mpsc (log lines + finished event).
+- `onboard` launches the TUI when interactive on a TTY, else falls back to prompts;
+  `--non-interactive/--device/--paste/--print-url` paths unchanged (e2e untouched).
+- Verify: 7 TUI unit tests (walk, defaults, method cycle, paste state validation,
+  ping toggle, finished routing, log cap, Ctrl-C); pty-driven walk renders every
+  screen through Confirm; `fmt`/`clippy -D warnings` clean, full workspace green.
+- Run: `just onboard` (TTY) — real browser dance still needs a human at Confirm.
+
+## 12. Next
 
 - Still TODO (needs onboarding specs): JSON5/`$include`/exec secrets, WS/RPC+pairing, Discord start/send, provider chat+`sub_usage` poll, full wizard fields+test/apply, focused-node UI components.
 - Run: `EZ_CONFIG_PATH=./rustez.json cargo run -p rustez -- doctor|status|gateway`.

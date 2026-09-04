@@ -45,7 +45,7 @@ justfile · REPORT.md (ledger) · TODO.md (deferred scope)
 | Test    | `just test` (unit + e2e) / `just e2e` (e2e)  |
 | Lint    | `just lint` (clippy, warnings denied)        |
 | Format  | `cargo fmt` (must be clean)                  |
-| Onboard | `just onboard [-- --token T --model M --non-interactive]` |
+| Onboard | `just onboard` (TUI on a TTY; flags otherwise — see §7) |
 | Serve   | `just gateway` (127.0.0.1:18790) / `just doctor` / `just wiz <key>` |
 
 Gate before any commit: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`,
@@ -105,7 +105,11 @@ secrets into chat when avoidable.
 
 ## 7. Resume protocol (how setup continues)
 
-1. `rustez onboard` writes `rustez.json` + `docs/SETUP.md` (front-matter
+1. `rustez onboard` opens an interactive TUI on a TTY (welcome → provider →
+   method [browser|device|paste] → model → confirm → live dance → done);
+   with flags/pipes it falls back to prompts (`--device/--paste/--print-url`,
+   `--non-interactive` needs `--paste-code + --verifier`). Either path writes
+   `rustez.json` + `docs/SETUP.md` (front-matter
    `provider/model/config/status` + `- [ ]` checklist + Agent section).
 2. The setup agent (`openai/<model>`, system prompt in `SETUP.md`) reads this guide,
    then `docs/SETUP.md` and the config it points to, works the next unchecked item

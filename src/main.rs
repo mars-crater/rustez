@@ -7,6 +7,8 @@ use rustez_agent::bootstrap::{
 };
 use rustez_agent::oauth;
 
+mod tui;
+
 #[derive(Parser)]
 #[command(
     name = "rustez",
@@ -416,48 +418,53 @@ struct OnboardOpts {
     skip_test: bool,
 }
 
-/// First-run bootstrap: welcome → OAuth dance → codex ping → rustez.json + docs handoff.
-fn onboard(o: OnboardOpts) {
-    eprintln!("{WELCOME}");
-    require_openai(&o.provider);
-    if o.print_url {
-        print_url_handoff();
-    }
-    if o.non_interactive && o.paste_code.is_none() {
-        eprintln!("non-interactive onboard needs --paste-code + --verifier (from --print-url),");
-        eprintln!("or run interactively: the dance needs a human in the browser.");
-        std::process::exit(2);
-    }
+/// Shared onboard inputs, resolved before the flow runs (CLI prompts or TUI screens).
+pub(crate) struct FlowParams {
+    pub provider: String,
+    pub model: String,
+    pub docs: String,
+    pub device: bool,
+    pub paste: bool,
+    pub paste_code: Option<String>,
+    pub verifier: Option<String>,
+    pub no_open: bool,
+    pub skip_test: bool,
+    /// On ping failure: ask "write config anyway?" (`true`) or abort (`false`).
+    pub ask_on_ping_fail: bool,
+    /// Used only when `ask_on_ping_fail` is set.
+    pub ask: Box<dyn Fn(&str) -> bool + Send>,
+}
+
+/// Shared onboard result (secret-free).
+pub(crate) struct FlowSummary {
+    pub provider: String,
+    pub model: String,
+    pub email: String,
+    pub account_id: String,
+    pub config_path: String,
+    pub docs_path: String,
+    pub ping_reply: Option<String>,
+}
+
+/// Core flow both frontends share: dance → ping → rustez.json + docs handoff.
+/// Logs progress via `log`; never logs secrets.
+pub(crate) fn run_flow(p: &FlowParams, log: &dyn Fn(&str)) -> anyhow::Result<FlowSummary> {
     let path = rustez_config::rustez_path();
 
-    let model = match o.model {
-        Some(m) if !m.trim().is_empty() => m,
-        _ if o.non_interactive => DEFAULT_OPENAI_MODEL.to_string(),
-        _ => {
-            let m = prompt("OpenAI model", Some(DEFAULT_OPENAI_MODEL));
-            if m.is_empty() {
-                DEFAULT_OPENAI_MODEL.to_string()
-            } else {
-                m
-            }
-        }
-    };
-
-    // The dance: browser localhost callback, device flow, or pasted code.
     let profile = run_dance(&DanceOpts {
-        device: o.device,
-        paste: o.paste,
+        device: p.device,
+        paste: p.paste,
         print_url: false,
-        paste_code: o.paste_code,
-        verifier: o.verifier,
-        no_open: o.no_open,
+        paste_code: p.paste_code.clone(),
+        verifier: p.verifier.clone(),
+        no_open: p.no_open,
     });
-    eprintln!("logged in: {}", describe_profile(&profile));
+    log(&format!("logged in: {}", describe_profile(&profile)));
 
     // Live test-it-out: one tiny subscription-backed chat through the codex backend.
-    let mut ping_ok = false;
-    if !o.skip_test {
-        eprintln!("testing openai/{model} with a ping…");
+    let mut ping_reply = None;
+    if !p.skip_test {
+        log(&format!("testing {}/{} with a ping…", p.provider, p.model));
         let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
@@ -465,23 +472,19 @@ fn onboard(o: OnboardOpts) {
         match rt.block_on(oauth::chat_codex(
             &profile.access_token,
             &profile.account_id,
-            &model,
+            &p.model,
             "ping",
         )) {
             Ok(reply) => {
-                ping_ok = true;
                 let short: String = reply.trim().chars().take(120).collect();
-                eprintln!("ping ok — model replied: {short}");
+                log(&format!("ping ok — model replied: {short}"));
+                ping_reply = Some(short);
             }
             Err(e) => {
-                eprintln!("ping failed: {e:#}");
-                if o.non_interactive {
-                    eprintln!("rerun with --skip-test to write config anyway.");
-                    std::process::exit(1);
-                }
-                let ans = prompt("write config anyway? [y/N]", Some("N"));
-                if !ans.eq_ignore_ascii_case("y") {
-                    std::process::exit(1);
+                if p.ask_on_ping_fail && (p.ask)("write config anyway? [y/N]") {
+                    log(&format!("ping failed ({e:#}) — writing config anyway."));
+                } else {
+                    anyhow::bail!("ping failed: {e:#}");
                 }
             }
         }
@@ -492,7 +495,7 @@ fn onboard(o: OnboardOpts) {
     apply_openai(
         &mut cfg,
         rustez_config::EzSecretInput::Literal(String::new()),
-        &model,
+        &p.model,
     );
     cfg.providers.openai.as_mut().expect("just set").api_key = None;
     cfg.providers.openai.as_mut().expect("just set").api = "chatgpt-codex".to_string();
@@ -505,22 +508,92 @@ fn onboard(o: OnboardOpts) {
             .parent()
             .is_some_and(|p| !p.as_os_str().is_empty())
         {
-            eprintln!("write {path}: {e:#}");
-            std::process::exit(1);
+            anyhow::bail!("write {path}: {e:#}");
         }
     }
 
-    if let Err(e) = write_setup_doc(&o.docs, &o.provider, &model, &path, ping_ok) {
-        eprintln!("write {}: {e:#}", o.docs);
-        std::process::exit(1);
-    }
+    write_setup_doc(&p.docs, &p.provider, &p.model, &path, ping_reply.is_some())
+        .map_err(|e| anyhow::anyhow!("write {}: {e:#}", p.docs))?;
 
-    eprintln!(
-        "bootstrapped {}/{model} (poll {DEFAULT_POLL_SECS}s) → config {path}, handoff {}.",
-        o.provider, o.docs
-    );
-    eprintln!(
-        "Setup agent is pointed at {} and resumes: Discord, usage, Qdrant, Proton Pass, email.",
-        o.docs
-    );
+    log(&format!(
+        "bootstrapped {}/{} (poll {DEFAULT_POLL_SECS}s) → config {path}, handoff {}.",
+        p.provider, p.model, p.docs
+    ));
+    Ok(FlowSummary {
+        provider: p.provider.clone(),
+        model: p.model.clone(),
+        email: profile.email.clone(),
+        account_id: profile.account_id.clone(),
+        config_path: path,
+        docs_path: p.docs.clone(),
+        ping_reply,
+    })
+}
+
+/// First-run bootstrap dispatcher: TUI when interactive on a TTY, prompts otherwise.
+fn onboard(o: OnboardOpts) {
+    eprintln!("{WELCOME}");
+    require_openai(&o.provider);
+    if o.print_url {
+        print_url_handoff();
+    }
+    if !o.non_interactive
+        && o.paste_code.is_none()
+        && std::io::IsTerminal::is_terminal(&std::io::stdout())
+    {
+        match tui::run_tui(&o.provider, o.model.as_deref(), &o.docs, o.skip_test) {
+            Ok(Some(s)) => {
+                eprintln!(
+                    "bootstrapped {}/{} → config {}, handoff {}.",
+                    s.provider, s.model, s.config_path, s.docs_path
+                );
+                return;
+            }
+            Ok(None) => {
+                eprintln!("onboard cancelled.");
+                return;
+            }
+            Err(e) => eprintln!("TUI unavailable ({e:#}); falling back to prompts."),
+        }
+    }
+    if o.non_interactive && o.paste_code.is_none() {
+        eprintln!("non-interactive onboard needs --paste-code + --verifier (from --print-url),");
+        eprintln!("or run interactively: the dance needs a human in the browser.");
+        std::process::exit(2);
+    }
+    let model = match o.model {
+        Some(m) if !m.trim().is_empty() => m,
+        _ if o.non_interactive => DEFAULT_OPENAI_MODEL.to_string(),
+        _ => {
+            let m = prompt("OpenAI model", Some(DEFAULT_OPENAI_MODEL));
+            if m.is_empty() {
+                DEFAULT_OPENAI_MODEL.to_string()
+            } else {
+                m
+            }
+        }
+    };
+    let params = FlowParams {
+        provider: o.provider,
+        model,
+        docs: o.docs,
+        device: o.device,
+        paste: o.paste,
+        paste_code: o.paste_code,
+        verifier: o.verifier,
+        no_open: o.no_open,
+        skip_test: o.skip_test,
+        ask_on_ping_fail: !o.non_interactive,
+        ask: Box::new(|q| prompt(q, Some("N")).eq_ignore_ascii_case("y")),
+    };
+    match run_flow(&params, &|m| eprintln!("{m}")) {
+        Ok(_) => eprintln!(
+            "Setup agent is pointed at {} and resumes: Discord, usage, Qdrant, Proton Pass, email.",
+            params.docs
+        ),
+        Err(e) => {
+            eprintln!("onboard failed: {e:#}");
+            std::process::exit(1);
+        }
+    }
 }

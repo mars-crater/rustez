@@ -39,7 +39,7 @@ run *ARGS:
 doctor:
     cargo run -p rustez -- doctor
 
-# first-run bootstrap: welcome + OpenAI dance + docs handoff
+# first-run bootstrap: TUI on a TTY (welcome → method → model → live dance → done)
 onboard *ARGS:
     cargo run -p rustez -- onboard {{ARGS}}
 

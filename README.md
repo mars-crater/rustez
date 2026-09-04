@@ -21,6 +21,7 @@ Optional: `just install` puts `rustez` on `~/.cargo/bin`.
 ```bash
 # First run: welcome + OpenAI dance (browser), writes rustez.json + docs/SETUP.md
 just onboard
+# Opens a TUI on a terminal; flags take over otherwise:
 # Headless: just onboard -- --device
 # Check auth any time: just auth status
 
